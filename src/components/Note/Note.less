@@ -1,0 +1,50 @@
+@toolbar-height: 20px;
+
+.noShow {
+  display: none;
+}
+
+.note {
+  display: block;
+  width: 200px;
+  height: 100px;
+  resize: both;
+  overflow: auto;
+  position: absolute;
+}
+
+.editable {
+  height: calc(100% - @toolbar-height);
+  width: 100%;
+}
+
+.toolbar {
+  &:hover {
+    display: block;
+    background-color: #eee;
+  }
+
+  &:hover .btnDelete {
+    display: block;
+    color: #777;
+    text-shadow: 0 1px 0 #fff;
+  }
+
+  background-color: transparent;
+  height: @toolbar-height;
+  width: 100%;
+}
+
+.btnDelete {
+  &:after {
+    content: '✖'; /* UTF-8 symbol */
+  }
+
+  color: transparent;
+  font: 14px/100% arial, sans-serif;
+  position: absolute;
+  right: 5px;
+  text-decoration: none;
+  top: 3px;
+  cursor: pointer;
+}
