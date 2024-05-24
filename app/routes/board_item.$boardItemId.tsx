@@ -1,15 +1,11 @@
-import { ActionFunctionArgs, json, redirect } from '@remix-run/node';
-import { createBoard } from '.server/board';
+import { ActionFunctionArgs, json } from '@remix-run/node';
 import { createBoardItem, deleteBoardItem, updateBoardItem } from '.server/board_item';
-import { getSession } from '.server/session';
+import { getSession, verifySession } from '.server/session';
 
 export async function action({ request, params } : ActionFunctionArgs) {
+  const session = await verifySession(request);
   const boardItemId = params.boardItemId;
-  const session = await getSession(request.headers.get('Cookie'));
-  let userId = '';
-  if (session.has('id')) {
-    userId = session.get('id')?.toString() || '';
-  }
+  let userId = session.get('id')?.toString() || '';
   let boardItemData;
   switch (request.method.toLowerCase()) {
     case 'post':
@@ -17,7 +13,7 @@ export async function action({ request, params } : ActionFunctionArgs) {
       if (!boardItemData) {
         throw new Error('must provide data for creating board item');
       }
-      const newBoardItem = await createBoardItem(boardItemData.boardId, boardItemData.userId, boardItemData.x, boardItemData.y, '#ffffff');
+      const newBoardItem = await createBoardItem(boardItemData.boardId, userId, boardItemData.x, boardItemData.y, '#ffffff');
       return json(newBoardItem);
     case 'delete':
       await deleteBoardItem(boardItemId || '');

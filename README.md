@@ -1,10 +1,25 @@
-# Welcome to Remix + Vite!
+# corkboard!
 
-📖 See the [Remix docs](https://remix.run/docs) and the [Remix Vite docs](https://remix.run/docs/en/main/guides/vite) for details on supported features.
+corkboard is a tool for teams doing agile scrum retrospective ceremonies. it is a simple pin
+board application where users can create a board and populate it with sticky notes to convey
+their thoughts.
 
 ## Development
 
-Run the Vite dev server:
+raise db server in docker:
+
+```shellscript
+docker compose up db
+```
+
+if you've made db schema changes:
+
+```shellscript
+npx prisma db pull
+npx prisma generate
+```
+
+else, run the Vite dev server:
 
 ```shellscript
 npm run dev

@@ -22,6 +22,7 @@ export const deleteBoardItem = async (boardItemId : string) => {
     },
     data: {
       is_deleted: true,
+      updated_at: new Date().toISOString(),
     }
   });
 };

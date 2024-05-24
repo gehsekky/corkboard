@@ -10,6 +10,9 @@ export const createBoard = async (name : string, color: string, createdById : st
       name,
       background_color: color,
       created_by: createdById,
+    },
+    include: {
+      board_item: true,
     }
   });
 };

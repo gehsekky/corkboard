@@ -4,6 +4,7 @@ import BoardItem from 'components/BoardItem';
 import React, { useContext, useState } from 'react';
 import { BoardContext, SessionContext } from 'context';
 import { board_item } from '@prisma/client';
+import { isbotMatches } from 'isbot';
 
 type BoardLandingProps = {
 
@@ -11,8 +12,9 @@ type BoardLandingProps = {
 
 const BoardLanding = ({} : BoardLandingProps) => {
   const boardContext = useContext(BoardContext);
-  const session = useContext(SessionContext);
   const [boardItems, setBoardItems] = useState<board_item[]>(boardContext?.board?.board_item || []);
+
+  const cloneBoardItems = () => boardItems.map((item) => ({...item}));
 
   const deleteBoardItem = async (boardItemId : string) => {
     const deleteBoardItemResponse = await fetch(`/board_item/${boardItemId}`, {
@@ -20,7 +22,7 @@ const BoardLanding = ({} : BoardLandingProps) => {
     });
     await deleteBoardItemResponse.json();
 
-    const boardItemsClone = [...boardItems];
+    const boardItemsClone = cloneBoardItems();
     const indexToRemove = boardItemsClone.findIndex((boardItem) => boardItem.id === boardItemId);
     if (indexToRemove > -1) {
       boardItemsClone.splice(indexToRemove, 1);
@@ -33,13 +35,12 @@ const BoardLanding = ({} : BoardLandingProps) => {
       method: 'post',
       body: JSON.stringify({
         boardId: boardContext?.board?.id,
-        userId: session?.id,
         x: 0,
         y: 0
       })
     });
     const newBoardItem = await createBoardItemResponse.json();
-    const boardItemsClone = [...boardItems];
+    const boardItemsClone = cloneBoardItems();
     boardItemsClone.push(newBoardItem);
     setBoardItems(boardItemsClone);
   };
@@ -56,10 +57,9 @@ const BoardLanding = ({} : BoardLandingProps) => {
       })
     });
     await updateBoardItemResponse.json();
-    const boardItemsClone = [...boardItems];
-    const indexToUpdate = boardItemsClone.findIndex((boardItem) => boardItem.id === boardItemId);
-    if (indexToUpdate > -1) {
-      const itemToUpdate = boardItemsClone[indexToUpdate];
+    const boardItemsClone = cloneBoardItems();
+    const itemToUpdate = boardItemsClone.find((boardItem) => boardItem.id === boardItemId);
+    if (itemToUpdate) {
       itemToUpdate.content = content;
       itemToUpdate.x = x;
       itemToUpdate.y = y;
