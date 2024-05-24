@@ -1,0 +1,1 @@
+export const DEBOUNCE_SETTIMEOUT_LENGTH = 500;

@@ -1,11 +1,36 @@
-# Corkboard
+# Welcome to Remix + Vite!
 
-### Overview
+📖 See the [Remix docs](https://remix.run/docs) and the [Remix Vite docs](https://remix.run/docs/en/main/guides/vite) for details on supported features.
 
-A corkboard note system created using react.
+## Development
 
-### Commands
+Run the Vite dev server:
 
-* yarn run build - creates build artifact
-* yarn run dev - starts dev server
-* yarn run test - starts jest
+```shellscript
+npm run dev
+```
+
+## Deployment
+
+First, build your app for production:
+
+```sh
+npm run build
+```
+
+Then run the app in production mode:
+
+```sh
+npm start
+```
+
+Now you'll need to pick a host to deploy it to.
+
+### DIY
+
+If you're familiar with deploying Node applications, the built-in Remix app server is production-ready.
+
+Make sure to deploy the output of `npm run build`
+
+- `build/server`
+- `build/client`
