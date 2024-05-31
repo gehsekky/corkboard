@@ -1,1 +1,2 @@
 export const DEBOUNCE_SETTIMEOUT_LENGTH = 500;
+export const DEFAULT_BOARD_ITEM_BACKGROUND_COLOR = '#ffffff';

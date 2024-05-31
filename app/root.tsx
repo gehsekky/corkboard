@@ -7,7 +7,6 @@ import {
   ScrollRestoration,
   useLoaderData,
 } from "@remix-run/react";
-import Header from './components/Header';
 import stylesheet from "./tailwind.css?url";
 import { getSession } from './.server/session';
 import { SessionContext } from 'context';

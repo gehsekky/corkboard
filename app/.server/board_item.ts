@@ -1,6 +1,15 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient();
+
+export const getBoardItemsByBoardId = async (boardId : string) => {
+  return await prisma.board_item.findMany({
+    where: {
+      board_id: boardId,
+      is_deleted: false,
+    },
+  })
+};
 
 export const createBoardItem = async (boardId : string, createdById : string, x : number, y : number, backgroundColor : string) => {
   return await prisma.board_item.create({
