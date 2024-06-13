@@ -1,7 +1,7 @@
-import React, { MouseEventHandler, useContext, useEffect, useState } from 'react';
+import { MouseEventHandler, useContext, useEffect, useState } from 'react';
 import { Navbar, NavbarBrand, NavbarCollapse, NavbarLink, NavbarToggle } from 'flowbite-react';
 
-import { BoardContext, SessionContext } from 'context';
+import { SessionContext } from 'context';
 import settingsIcon from 'public/img/settings.svg';
 import { board } from '@prisma/client';
 

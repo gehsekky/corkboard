@@ -12,6 +12,11 @@ raise db server in docker:
 docker compose up db
 ```
 
+if this is first time starting up locally:
+```shellscript
+npx prisma generate
+```
+
 if you've made db schema changes:
 
 ```shellscript
@@ -24,6 +29,21 @@ else, run the Vite dev server:
 ```shellscript
 npm run dev
 ```
+
+in browser, open `localhost:5173`
+
+example quick startup:
+
+```shellscript
+git clone https://github.com/gehsekky/corkboard.git
+cd corkboard
+nvm use
+npm i
+npx prisma generate
+npm run docker
+```
+
+in browser, open `localhost:3000`
 
 ## Deployment
 

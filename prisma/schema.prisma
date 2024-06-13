@@ -50,8 +50,8 @@ model user {
   id            String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   email         String       @unique @db.VarChar(256)
   name          String       @db.VarChar(128)
-  salt          String       @db.VarChar(64)
-  password_hash String       @db.VarChar(512)
+  salt          String       @db.VarChar(16)
+  password_hash String       @db.VarChar(256)
   updated_at    DateTime     @default(now()) @db.Timestamptz(6)
   created_at    DateTime     @default(now()) @db.Timestamptz(6)
   board         board[]
