@@ -8,8 +8,8 @@ import Header from 'components/Header';
 
 export const loader = async ({ request } : LoaderFunctionArgs) => {
   const session = await verifySession(request);
-  const boards = await getBoardsByUserId(session.get('id') || '');
-  return json(boards);
+  const boardData = await getBoardsByUserId(session.get('id') || '');
+  return json(boardData);
 };
 
 export default function Index() {
@@ -19,7 +19,7 @@ export default function Index() {
     <>
       <Header />
       <LandingPage>
-        <BoardList boards={loaderData} />
+        <BoardList boardData={loaderData} />
       </LandingPage>
     </>
   );

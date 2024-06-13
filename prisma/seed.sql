@@ -9,7 +9,7 @@ CREATE TABLE public.user (
   id UUID NOT NULL DEFAULT uuid_generate_v4(),
   email varchar(256) NOT NULL UNIQUE,
   name varchar(128) NOT NULL,
-  salt varchar(32) NOT NULL,
+  salt varchar(64) NOT NULL,
   password_hash varchar(512) NOT NULL,
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   created_at timestamp with time zone NOT NULL DEFAULT now(),

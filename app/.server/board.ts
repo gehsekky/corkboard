@@ -3,12 +3,23 @@ import { PrismaClient, board } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export const createBoard = async (name : string, color: string, createdById : string) => {
-  return await prisma.board.create({
-    data: {
-      name,
-      background_color: color,
-      created_by: createdById,
-    },
+  return await prisma.$transaction(async (tx) => {
+    const newBoard = await tx.board.create({
+      data: {
+        name,
+        background_color: color,
+        created_by: createdById,
+      },
+    });
+
+    await tx.board_user.create({
+      data: {
+        board_id: newBoard.id,
+        user_id: createdById,
+      }
+    });
+
+    return newBoard;
   });
 };
 
@@ -26,10 +37,13 @@ export const getBoardById = async (boardId : string) => {
 };
 
 export const getBoardsByUserId = async (userId : string) => {
-  return await prisma.board.findMany({
+  return await prisma.board_user.findMany({
     where: {
-      created_by: userId,
+      user_id: userId,
     },
+    include: {
+      board: true,
+    }
   })
 };
 

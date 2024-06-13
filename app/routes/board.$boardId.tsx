@@ -3,7 +3,7 @@ import { Form, useLoaderData } from '@remix-run/react';
 import { verifySession } from '.server/session';
 import { getBoardById, updateBoard } from '.server/board';
 import Header from 'components/Header';
-import React, { MouseEventHandler, useEffect, useRef, useState } from 'react';
+import React, { MouseEventHandler, useEffect, useState } from 'react';
 import { useRevalidator } from '@remix-run/react';
 import { useEventSource } from 'remix-utils/sse/react';
 import { getBoardItemsByBoardId } from '.server/board_item';
@@ -14,6 +14,7 @@ import BoardItem from 'components/BoardItem';
 import { Button, Label, Modal, TextInput } from 'flowbite-react';
 import { emitter } from 'services/emitter.server';
 import { DEBOUNCE_SETTIMEOUT_LENGTH } from 'constants/';
+import { createBoardUser, getBoardUsersByBoardId } from '.server/board_user';
 
 export const loader = async ({ request, params } : LoaderFunctionArgs) => {
   await verifySession(request);
@@ -27,9 +28,18 @@ export const loader = async ({ request, params } : LoaderFunctionArgs) => {
     if (!boardItems) {
       throw new Error('could not get board items');
     }
+    const boardUsers = await getBoardUsersByBoardId(board.id);
+    if (!boardUsers) {
+      throw new Error('could not get board users');
+    }
     return json({ 
       board,
       boardItems,
+      boardUsers: boardUsers.map((boardUser) => ({
+        id: boardUser.user.id,
+        email: boardUser.user.email,
+        name: boardUser.user.name,
+      })),
      });
   } catch (ex) {
     return json({
@@ -42,16 +52,32 @@ export const loader = async ({ request, params } : LoaderFunctionArgs) => {
         created_at: new Date(),
     },
       boardItems: [],
+      boardUsers: [],
     })
   }
 };
 
 export const action = async ({ request } : ActionFunctionArgs) => {
   await verifySession(request);
+  let updatedBoard;
   switch (request.method.toLowerCase()) {
+    case 'post':
+      const { board, addBoardUser } = await request.json();
+      updatedBoard = await updateBoard(board);
+      if (!updatedBoard) {
+        throw new Error('could not update board');
+      }
+      if (addBoardUser) {
+        const boardUser = await createBoardUser(board.id, addBoardUser);
+        if (!boardUser) {
+          throw new Error('could not create board user');
+        }
+      }
+      emitter.emit('boardchange');
+      return updatedBoard;
     case 'put':
-      const board = await request.json();
-      const updatedBoard = await updateBoard(board);
+      const boardToUpdate = await request.json();
+      updatedBoard = await updateBoard(boardToUpdate);
       if (!updatedBoard) {
         throw new Error('could not update board');
       }
@@ -64,11 +90,13 @@ export const action = async ({ request } : ActionFunctionArgs) => {
 
 export default function BoardIndex() {
   const loaderData = useLoaderData<typeof loader>();
-  const [board, setBoard] = useState(loaderData.board as unknown as board);
+  const [board, setBoard] = useState(loaderData.board);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [boardColor, setBoardColor] = useState(board?.background_color);
   const [debouncedBoardColor, setDebouncedBoardColor] = useState(boardColor);
   const [boardName, setBoardName] = useState(board.name);
+  const [addUserEmail, setAddUserEmail] = useState('');
+  const [boardUsers, setBoardUsers] = useState(loaderData.boardUsers);
   const revalidator = useRevalidator();
   
   const boardItems = loaderData.boardItems as unknown as board_item[];
@@ -76,9 +104,10 @@ export default function BoardIndex() {
   let lastTimeBoardUpdated = useEventSource('/sse', { event: 'boardchange'});
 
   useEffect(() => {
-    setBoard(loaderData.board as unknown as board);
-    setBoardColor((loaderData.board as unknown as board).background_color);
-    setBoardName((loaderData.board as unknown as board).name);
+    setBoard(loaderData.board);
+    setBoardColor(loaderData.board.background_color);
+    setBoardName(loaderData.board.name);
+    setBoardUsers(loaderData.boardUsers);
   }, [loaderData]);
 
   // update on color change
@@ -163,9 +192,13 @@ export default function BoardIndex() {
     const boardCopy = {...board};
     boardCopy.name = boardName;
     boardCopy.background_color = debouncedBoardColor;
+    setAddUserEmail('');
     const response = await fetch(`/board/${board.id}`, {
-      method: 'put',
-      body: JSON.stringify(boardCopy),
+      method: 'post',
+      body: JSON.stringify({
+        board: boardCopy,
+        addBoardUser: addUserEmail,
+    }),
     });
     if (!response) {
       throw new Error('could not update board');
@@ -174,7 +207,7 @@ export default function BoardIndex() {
 
   return (
     <>
-      <Header board={board} onSettingsClick={onSettingsClick} />
+      <Header board={board as unknown as board} onSettingsClick={onSettingsClick} />
       <div className="h-[calc(100vh-3rem)] w-full">
         <div className="h-full w-full">
           <div className="w-full h-full" style={{ backgroundColor: board.background_color }}>
@@ -205,6 +238,24 @@ export default function BoardIndex() {
                   <Label htmlFor="boardColor" value="board background color" />
                 </div>
                 <input id="boardColor" name="boardColor" type="color" required className="h-8 w-8" value={boardColor} onChange={onChangeBackgroundColor} />
+              </div>
+              <div>
+                <div className="mb-2 block">
+                  <Label htmlFor="addUserEmail" value="add board user" />
+                </div>
+                <TextInput id="addUserEmail" name="addUserEmail" type="text" value={addUserEmail} onChange={(e) => setAddUserEmail(e.currentTarget.value)} />
+              </div>
+              <div>
+                <div className="mb-2 block">
+                  <Label value="current board users" />
+                </div>
+                <ul>
+                  {
+                    boardUsers.map((boardUser) => (
+                      <li key={boardUser.id}>{boardUser.name}</li>
+                    ))
+                  }
+                </ul>
               </div>
               <Button type="submit" name="submit" value="update board" onClick={onModalSubmitClick}>update board</Button>
             </Form>
