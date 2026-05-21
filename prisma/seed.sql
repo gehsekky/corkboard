@@ -78,3 +78,16 @@ CREATE TABLE public.board_item (
 );
 
 CREATE INDEX board_item_board_id_idx ON public.board_item(board_id);
+
+CREATE TABLE public.board_audit (
+  id UUID NOT NULL DEFAULT uuid_generate_v4(),
+  board_id UUID REFERENCES public.board(id),
+  actor_user_id UUID REFERENCES public.user(id),
+  action varchar(64) NOT NULL,
+  details JSONB,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+CREATE INDEX board_audit_board_id_idx ON public.board_audit(board_id);
+CREATE INDEX board_audit_created_at_idx ON public.board_audit(created_at DESC);

@@ -1,4 +1,5 @@
 import { prisma } from './db';
+import { recordAudit } from './audit';
 
 export const createBoard = async (name : string, color: string, createdById : string) => {
   return await prisma.$transaction(async (tx) => {
@@ -15,6 +16,14 @@ export const createBoard = async (name : string, color: string, createdById : st
         board_id: newBoard.id,
         user_id: createdById,
       }
+    });
+
+    await recordAudit({
+      tx,
+      boardId: newBoard.id,
+      actorUserId: createdById,
+      action: 'board.created',
+      details: { name, background_color: color },
     });
 
     return newBoard;

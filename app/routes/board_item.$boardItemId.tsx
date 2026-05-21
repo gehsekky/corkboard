@@ -4,6 +4,7 @@ import { verifySession } from '.server/session';
 import { assertBoardItemAccess, assertBoardMember } from '.server/authz';
 import { boardItemCreateSchema, boardItemUpdateSchema, parseJson } from '.server/validate';
 import { limitByUser } from '.server/rate-limit';
+import { log } from '.server/log';
 import { emitter, itemsChannel } from 'services/emitter.server';
 import { DEFAULT_BOARD_ITEM_BACKGROUND_COLOR } from 'constants/';
 
@@ -27,7 +28,7 @@ export async function action({ request, params } : ActionFunctionArgs) {
         emitter.emit(itemsChannel(body.boardId), { type: 'item.created', item: newBoardItem });
         return json(newBoardItem, { headers });
       } catch (err) {
-        console.error(err);
+        log.error({ err }, 'board_item action failed');
         return json(null, { headers });
       }
     }
@@ -41,7 +42,7 @@ export async function action({ request, params } : ActionFunctionArgs) {
         emitter.emit(itemsChannel(itemBoardId), { type: 'item.deleted', itemId: boardItemId });
         return json(null, { headers });
       } catch (err) {
-        console.error(err);
+        log.error({ err }, 'board_item action failed');
         return json(null, { headers });
       }
     }
@@ -62,7 +63,7 @@ export async function action({ request, params } : ActionFunctionArgs) {
         emitter.emit(itemsChannel(itemBoardId), { type: 'item.updated', item: updated });
         return json(null, { headers });
       } catch (err) {
-        console.error(err);
+        log.error({ err }, 'board_item action failed');
         return json(null, { headers });
       }
     }

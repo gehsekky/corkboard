@@ -196,13 +196,38 @@ Added in `seed.sql` and `schema.prisma`: `board_item(board_id)`, `board_user(boa
 
 ## Architecture / hygiene
 
-### 17. Authorization integration tests
-- Vitest suite with a containerized Postgres.
-- At minimum: "user B cannot read/write board A", "non-member cannot subscribe to board A's SSE", "removed member loses access immediately", "body-supplied `board.id` cannot override URL `params.boardId`".
+### 17. Authorization integration tests ✅
+- ~~Vitest suite with a containerized Postgres.~~
 
-### 18. Structured logging + audit trail
-- Add `board_audit` table for create/delete/add-member/remove-member events.
-- Structured (JSON) logs via `pino`, request ID per request.
+`test/authz.test.ts` runs against a real Postgres (the existing compose `db` container, separate `db_corkboard_test` database — recreated on each `npm test`). 10 tests, ~1.3s end-to-end:
+- non-member cannot read another board (404)
+- member can read their board (200)
+- non-member cannot POST-update a board (404)
+- **body-supplied `board.id` cannot override URL `params.boardId`** — verified that boardB is unchanged when its id is smuggled in the body of a POST to boardA
+- non-member cannot create board items on another board (404)
+- non-member cannot update another board's item (404)
+- removed member loses access immediately (soft-delete + reread → 404)
+- non-member cannot subscribe to a board's SSE channel (404)
+- unauthenticated request redirects to `/login`
+- cross-site mutation (`Sec-Fetch-Site: cross-site`) is rejected (403)
+
+`vitest.config.ts` runs file-serially (single Postgres) and loads env vars (`SESSION_SECRET`, `AUTH_CALLBACK_BASE_URL`, test `DATABASE_URL`) before workers start. Helpers in `test/helpers.ts`: `createTestUser`, `createTestBoard`, `addBoardMember`, `createTestBoardItem`, `buildAuthedRequest`, `expectResponseStatus`. Scripts: `npm test`, `npm run test:watch`.
+
+### 18. Structured logging + audit trail ✅ (partial)
+- ~~Add `board_audit` table for create/delete/add-member/remove-member events.~~
+- ~~Structured (JSON) logs via `pino`.~~
+
+`board_audit` table added (`prisma/seed.sql` + `prisma/schema.prisma`): `id, board_id, actor_user_id, action, details (JSONB), created_at`. Indexed on `board_id` and `created_at DESC` for "most-recent-events" queries. `app/.server/audit.ts` exports `recordAudit({boardId, actorUserId, action, details, tx?})` — accepts an optional transaction client so audit + state change happen atomically. Wired into:
+- `createBoard` → `board.created` (in-transaction)
+- `board.$boardId.tsx` POST/PUT → `board.updated`
+- `createInvite` → `member.invited`
+- `acceptInvite` → `member.joined` (in-transaction)
+
+`app/.server/log.ts` exports a `pino` logger. Pretty-printed in dev (`pino-pretty`), JSON in production, silent in tests. Replaced `console.error` in `entry.server.tsx` and `board_item.$boardItemId.tsx` with structured `log.error`. The `recordAudit` helper also emits an `audit: true` log line so a single grep finds every governance event.
+
+Open follow-up:
+- **Per-request request ID** for log correlation. Needs `AsyncLocalStorage` in `entry.server.tsx` to plumb a UUID into every loader/action log. Same plumbing as the CSP nonce follow-up under #8.
+- More audit hooks (`board_item.created/deleted`) only if we end up wanting an audit feed UI — high volume, may bloat the table.
 
 ### 19. Horizontal scaling readiness
 - Once SSE is on `LISTEN/NOTIFY` (#6) and DB client is shared (#13), the app should be safe to run behind a load balancer with N replicas.

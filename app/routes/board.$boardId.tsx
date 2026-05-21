@@ -16,6 +16,7 @@ import { emitter, metaChannel } from 'services/emitter.server';
 import { DEBOUNCE_SETTIMEOUT_LENGTH } from 'constants/';
 import { createInvite } from '.server/invite';
 import { boardUpsertWithInviteSchema, boardUpdateSchema, parseJson } from '.server/validate';
+import { recordAudit } from '.server/audit';
 
 const jsonFetch = (url: string, method: string, body?: unknown) => fetch(url, {
   method,
@@ -66,6 +67,7 @@ export const action = async ({ request, params } : ActionFunctionArgs) => {
       if (!updatedBoard) {
         throw new Error('could not update board');
       }
+      await recordAudit({ boardId, actorUserId: userId, action: 'board.updated', details: { name: board.name, background_color: board.background_color } });
       let inviteUrl: string | null = null;
       if (addBoardUser) {
         const invite = await createInvite(boardId, userId, addBoardUser);
@@ -81,6 +83,7 @@ export const action = async ({ request, params } : ActionFunctionArgs) => {
       if (!updatedBoard) {
         throw new Error('could not update board');
       }
+      await recordAudit({ boardId, actorUserId: userId, action: 'board.updated', details: { name: data.name, background_color: data.background_color } });
       emitter.emit(metaChannel(boardId));
       return json(updatedBoard, { headers });
     }

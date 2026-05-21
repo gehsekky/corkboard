@@ -1,6 +1,7 @@
 import { board_invite } from '@prisma/client';
 import crypto from 'node:crypto';
 import { prisma } from './db';
+import { recordAudit } from './audit';
 
 const INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const TOKEN_BYTES = 32;
@@ -9,7 +10,7 @@ export type InviteWithBoard = board_invite & { board: { id: string; name: string
 
 export const createInvite = async (boardId: string, invitedById: string, email?: string): Promise<board_invite> => {
   const token = crypto.randomBytes(TOKEN_BYTES).toString('base64url');
-  return await prisma.board_invite.create({
+  const invite = await prisma.board_invite.create({
     data: {
       board_id: boardId,
       invited_by: invitedById,
@@ -18,6 +19,13 @@ export const createInvite = async (boardId: string, invitedById: string, email?:
       expires_at: new Date(Date.now() + INVITE_TTL_MS),
     },
   });
+  await recordAudit({
+    boardId,
+    actorUserId: invitedById,
+    action: 'member.invited',
+    details: { email: email || null, invite_id: invite.id },
+  });
+  return invite;
 };
 
 export const getInviteByToken = async (token: string): Promise<InviteWithBoard | null> => {
@@ -64,6 +72,14 @@ export const acceptInvite = async (token: string, userId: string): Promise<{ boa
     await tx.board_invite.update({
       where: { id: invite.id },
       data: { accepted_at: new Date() },
+    });
+
+    await recordAudit({
+      tx,
+      boardId: invite.board_id,
+      actorUserId: userId,
+      action: 'member.joined',
+      details: { invite_id: invite.id },
     });
 
     return { boardId: invite.board_id };
