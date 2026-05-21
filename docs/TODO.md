@@ -229,9 +229,17 @@ Open follow-up:
 - **Per-request request ID** for log correlation. Needs `AsyncLocalStorage` in `entry.server.tsx` to plumb a UUID into every loader/action log. Same plumbing as the CSP nonce follow-up under #8.
 - More audit hooks (`board_item.created/deleted`) only if we end up wanting an audit feed UI — high volume, may bloat the table.
 
-### 19. Horizontal scaling readiness
-- Once SSE is on `LISTEN/NOTIFY` (#6) and DB client is shared (#13), the app should be safe to run behind a load balancer with N replicas.
-- Add a healthcheck endpoint for the orchestrator.
+### 19. Horizontal scaling readiness — deferred
+**Decision: stay single-instance for now.** A single Node process is sufficient for the team-retro use case. Revisit if usage grows.
+
+When revisiting, two things need to move off in-process state:
+1. **SSE pub/sub.** `services/emitter.server.ts` is a `node:events` EventEmitter — won't fan out across instances. Replace with Postgres `LISTEN/NOTIFY` (no new infra) or Redis pub/sub.
+2. **Rate-limit counters.** `app/.server/rate-limit.ts` keeps buckets on `globalThis` — needs to move to Redis (`INCR`+`EXPIRE`) or a Postgres counter table.
+
+Also when scaling out:
+- Add a `/healthz` endpoint for the orchestrator.
+- Move OIDC client cache (`oidc.ts`) — currently per-process; reasonable to keep per-process even multi-instance.
+- Verify session cookie behavior — already stateless (signed payload), so no shared session store needed.
 
 ## Future / lower priority
 
