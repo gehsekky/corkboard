@@ -1,6 +1,4 @@
-import { PrismaClient, board } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from './db';
 
 export const createBoard = async (name : string, color: string, createdById : string) => {
   return await prisma.$transaction(async (tx) => {
@@ -24,16 +22,22 @@ export const createBoard = async (name : string, color: string, createdById : st
 };
 
 export const getBoardById = async (boardId : string) => {
-  try {
-    return await prisma.board.findUnique({
-      where: {
-        id: boardId,
+  return await prisma.board.findUnique({
+    where: { id: boardId },
+  });
+};
+
+export const getBoardWithItemsAndUsers = async (boardId: string) => {
+  return await prisma.board.findUnique({
+    where: { id: boardId },
+    include: {
+      board_item: { where: { is_deleted: false } },
+      board_user: {
+        where: { is_deleted: false },
+        include: { user: true },
       },
-    });
-  } catch (err) {
-    console.error(err);
-    return null;
-  }
+    },
+  });
 };
 
 export const getBoardsByUserId = async (userId : string) => {
@@ -47,15 +51,13 @@ export const getBoardsByUserId = async (userId : string) => {
   })
 };
 
-export const updateBoard = async (board : board) => {
+export const updateBoard = async (id: string, data: { name: string; background_color: string }) => {
   return await prisma.board.update({
-    where: {
-      id: board.id,
-    },
+    where: { id },
     data: {
-      background_color: board.background_color,
-      name: board.name,
-      updated_at: new Date().toISOString(),
+      background_color: data.background_color,
+      name: data.name,
+      updated_at: new Date(),
     },
   });
 };

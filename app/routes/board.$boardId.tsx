@@ -1,90 +1,91 @@
 import { ActionFunctionArgs, LoaderFunctionArgs, json } from '@remix-run/node';
 import { Form, useLoaderData } from '@remix-run/react';
 import { verifySession } from '.server/session';
-import { getBoardById, updateBoard } from '.server/board';
+import { assertBoardMember } from '.server/authz';
+import { getBoardWithItemsAndUsers, updateBoard } from '.server/board';
 import Header from 'components/Header';
 import React, { MouseEventHandler, useEffect, useState } from 'react';
 import { useRevalidator } from '@remix-run/react';
 import { useEventSource } from 'remix-utils/sse/react';
-import { getBoardItemsByBoardId } from '.server/board_item';
 import { board, board_item } from '@prisma/client';
 import SpeedDial from 'components/SpeedDial';
 import DialItem from 'components/SpeedDial/DialItem';
 import BoardItem from 'components/BoardItem';
 import { Button, Label, Modal, TextInput } from 'flowbite-react';
-import { emitter } from 'services/emitter.server';
+import { emitter, metaChannel } from 'services/emitter.server';
 import { DEBOUNCE_SETTIMEOUT_LENGTH } from 'constants/';
-import { createBoardUser, getBoardUsersByBoardId } from '.server/board_user';
+import { createInvite } from '.server/invite';
+import { boardUpsertWithInviteSchema, boardUpdateSchema, parseJson } from '.server/validate';
+
+const jsonFetch = (url: string, method: string, body?: unknown) => fetch(url, {
+  method,
+  credentials: 'same-origin',
+  headers: { 'Content-Type': 'application/json' },
+  ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+});
 
 export const loader = async ({ request, params } : LoaderFunctionArgs) => {
-  await verifySession(request);
-
-  try {
-    const board = await getBoardById(params.boardId || '');
-    if (!board) {
-      throw new Error('could not get board');
-    }
-    const boardItems = await getBoardItemsByBoardId(board.id);
-    if (!boardItems) {
-      throw new Error('could not get board items');
-    }
-    const boardUsers = await getBoardUsersByBoardId(board.id);
-    if (!boardUsers) {
-      throw new Error('could not get board users');
-    }
-    return json({ 
-      board,
-      boardItems,
-      boardUsers: boardUsers.map((boardUser) => ({
-        id: boardUser.user.id,
-        email: boardUser.user.email,
-        name: boardUser.user.name,
-      })),
-     });
-  } catch (ex) {
-    return json({
-      board: {
-        id: '',
-        name: '',
-        background_color: '',
-        created_by: '',
-        updated_at: new Date(),
-        created_at: new Date(),
-    },
-      boardItems: [],
-      boardUsers: [],
-    })
+  const { session, headers } = await verifySession(request);
+  const userId = session.get('id') || '';
+  const boardId = params.boardId;
+  if (!boardId) {
+    throw new Response(null, { status: 404 });
   }
+  await assertBoardMember(userId, boardId);
+
+  const full = await getBoardWithItemsAndUsers(boardId);
+  if (!full) {
+    throw new Response(null, { status: 404 });
+  }
+  const { board_item: boardItems, board_user: boardUsers, ...board } = full;
+  return json({
+    board,
+    boardItems,
+    boardUsers: boardUsers.map((bu) => ({
+      id: bu.user.id,
+      email: bu.user.email,
+      name: bu.user.name,
+    })),
+  }, { headers });
 };
 
-export const action = async ({ request } : ActionFunctionArgs) => {
-  await verifySession(request);
+export const action = async ({ request, params } : ActionFunctionArgs) => {
+  const { session, headers } = await verifySession(request);
+  const userId = session.get('id') || '';
+  const boardId = params.boardId;
+  if (!boardId) {
+    throw new Response(null, { status: 404 });
+  }
+  await assertBoardMember(userId, boardId);
+
   let updatedBoard;
   switch (request.method.toLowerCase()) {
-    case 'post':
-      const { board, addBoardUser } = await request.json();
-      updatedBoard = await updateBoard(board);
+    case 'post': {
+      const { board, addBoardUser } = await parseJson(request, boardUpsertWithInviteSchema);
+      updatedBoard = await updateBoard(boardId, board);
       if (!updatedBoard) {
         throw new Error('could not update board');
       }
+      let inviteUrl: string | null = null;
       if (addBoardUser) {
-        const boardUser = await createBoardUser(board.id, addBoardUser);
-        if (!boardUser) {
-          throw new Error('could not create board user');
-        }
+        const invite = await createInvite(boardId, userId, addBoardUser);
+        const base = (process.env.AUTH_CALLBACK_BASE_URL || '').replace(/\/$/, '');
+        inviteUrl = `${base}/invite/${invite.token}`;
       }
-      emitter.emit('boardchange');
-      return updatedBoard;
-    case 'put':
-      const boardToUpdate = await request.json();
-      updatedBoard = await updateBoard(boardToUpdate);
+      emitter.emit(metaChannel(boardId));
+      return json({ board: updatedBoard, inviteUrl }, { headers });
+    }
+    case 'put': {
+      const data = await parseJson(request, boardUpdateSchema);
+      updatedBoard = await updateBoard(boardId, data);
       if (!updatedBoard) {
         throw new Error('could not update board');
       }
-      emitter.emit('boardchange');
-      return updatedBoard;
+      emitter.emit(metaChannel(boardId));
+      return json(updatedBoard, { headers });
+    }
     default:
-      throw new Error('unsupported http method');
+      throw new Response('unsupported method', { status: 405 });
   }
 };
 
@@ -96,18 +97,21 @@ export default function BoardIndex() {
   const [debouncedBoardColor, setDebouncedBoardColor] = useState(boardColor);
   const [boardName, setBoardName] = useState(board.name);
   const [addUserEmail, setAddUserEmail] = useState('');
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [boardUsers, setBoardUsers] = useState(loaderData.boardUsers);
+  const [boardItems, setBoardItems] = useState(loaderData.boardItems as unknown as board_item[]);
   const revalidator = useRevalidator();
-  
-  const boardItems = loaderData.boardItems as unknown as board_item[];
-  let lastTimeBoardItemsUpdated = useEventSource('/sse', { event: 'boarditemschange'});
-  let lastTimeBoardUpdated = useEventSource('/sse', { event: 'boardchange'});
+
+  const sseUrl = `/sse?boardId=${board.id}`;
+  const itemsEvent = useEventSource(sseUrl, { event: 'items' });
+  const metaEvent = useEventSource(sseUrl, { event: 'meta' });
 
   useEffect(() => {
     setBoard(loaderData.board);
     setBoardColor(loaderData.board.background_color);
     setBoardName(loaderData.board.name);
     setBoardUsers(loaderData.boardUsers);
+    setBoardItems(loaderData.boardItems as unknown as board_item[]);
   }, [loaderData]);
 
   // update on color change
@@ -123,60 +127,65 @@ export default function BoardIndex() {
       const boardClone = JSON.parse(JSON.stringify(board));
       boardClone.background_color = debouncedBoardColor;
       setBoard && setBoard(boardClone);
-      fetch(`/board/${board.id}`, {
-        method: 'put',
-        body: JSON.stringify(boardClone),
-      });
+      jsonFetch(`/board/${board.id}`, 'put', boardClone);
     }
   }, [debouncedBoardColor]);
 
   useEffect(() => {
+    if (!itemsEvent) return;
+    let parsed: { type?: string; item?: board_item; itemId?: string };
+    try {
+      parsed = JSON.parse(itemsEvent);
+    } catch {
+      return;
+    }
+    if (parsed.type === 'item.created' && parsed.item) {
+      const item = parsed.item;
+      setBoardItems((prev) => (prev.some((i) => i.id === item.id) ? prev : [...prev, item]));
+    } else if (parsed.type === 'item.updated' && parsed.item) {
+      const item = parsed.item;
+      setBoardItems((prev) => prev.map((i) => (i.id === item.id ? item : i)));
+    } else if (parsed.type === 'item.deleted' && parsed.itemId) {
+      const itemId = parsed.itemId;
+      setBoardItems((prev) => prev.filter((i) => i.id !== itemId));
+    }
+  }, [itemsEvent]);
+
+  useEffect(() => {
+    if (!metaEvent) return;
     revalidator.revalidate();
-  }, [lastTimeBoardItemsUpdated, lastTimeBoardUpdated]);
+  }, [metaEvent]);
 
   const deleteBoardItem = async (boardItemId : string) => {
-    const deleteBoardItemResponse = await fetch(`/board_item/${boardItemId}`, {
-      method: 'delete',
-    });
-    await deleteBoardItemResponse.json();
-
-    const indexToRemove = boardItems.findIndex((boardItem) => boardItem.id === boardItemId);
-    if (indexToRemove > -1) {
-      boardItems.splice(indexToRemove, 1);
-    }
+    setBoardItems((prev) => prev.filter((i) => i.id !== boardItemId));
+    await jsonFetch(`/board_item/${boardItemId}`, 'delete');
   };
 
   const createBoardItemOnClick = async () => {
-    const createBoardItemResponse = await fetch('/board_item/new', {
-      method: 'post',
-      body: JSON.stringify({
-        boardId: board?.id,
-        x: 0,
-        y: 0
-      })
+    const createBoardItemResponse = await jsonFetch('/board_item/new', 'post', {
+      boardId: board?.id,
+      x: 0,
+      y: 0,
     });
     const newBoardItem = await createBoardItemResponse.json();
-    boardItems.push(newBoardItem);
+    setBoardItems((prev) => (prev.some((i) => i.id === newBoardItem.id) ? prev : [...prev, newBoardItem]));
   };
 
   const updateBoardItem = async (boardItemId : string, content : string, x : number, y : number, color : string) => {
-    const updateBoardItemResponse = await fetch(`/board_item/${boardItemId}`, {
-      method: 'put',
-      body: JSON.stringify({
-        boardItemId,
-        content,
-        x,
-        y,
-        color,
-      })
+    setBoardItems((prev) => prev.map((i) => (i.id === boardItemId ? {
+      ...i,
+      content: content ?? i.content,
+      x: x ?? i.x,
+      y: y ?? i.y,
+      background_color: color ?? i.background_color,
+    } : i)));
+    await jsonFetch(`/board_item/${boardItemId}`, 'put', {
+      boardItemId,
+      content,
+      x,
+      y,
+      color,
     });
-    await updateBoardItemResponse.json();
-    const itemToUpdate = boardItems.find((boardItem) => boardItem.id === boardItemId);
-    if (itemToUpdate) {
-      itemToUpdate.content = content;
-      itemToUpdate.x = x;
-      itemToUpdate.y = y;
-    }
   };
 
   const onSettingsClick = () => {
@@ -188,21 +197,29 @@ export default function BoardIndex() {
   };
 
   const onModalSubmitClick : MouseEventHandler<HTMLButtonElement> = async () => {
-    setIsSettingsModalOpen(false);
     const boardCopy = {...board};
     boardCopy.name = boardName;
     boardCopy.background_color = debouncedBoardColor;
+    const submittedEmail = addUserEmail;
     setAddUserEmail('');
-    const response = await fetch(`/board/${board.id}`, {
-      method: 'post',
-      body: JSON.stringify({
-        board: boardCopy,
-        addBoardUser: addUserEmail,
-    }),
+    const response = await jsonFetch(`/board/${board.id}`, 'post', {
+      board: boardCopy,
+      addBoardUser: submittedEmail,
     });
-    if (!response) {
+    if (!response.ok) {
       throw new Error('could not update board');
     }
+    const result = await response.json();
+    if (result?.inviteUrl) {
+      setInviteUrl(result.inviteUrl);
+    } else {
+      setIsSettingsModalOpen(false);
+    }
+  };
+
+  const closeSettingsModal = () => {
+    setIsSettingsModalOpen(false);
+    setInviteUrl(null);
   };
 
   return (
@@ -222,7 +239,7 @@ export default function BoardIndex() {
           </div>
         </div>
       </div>
-      <Modal show={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)}>
+      <Modal show={isSettingsModalOpen} onClose={closeSettingsModal}>
         <Modal.Header>board settings</Modal.Header>
         <Modal.Body>
           <div className="mx-auto">
@@ -241,10 +258,16 @@ export default function BoardIndex() {
               </div>
               <div>
                 <div className="mb-2 block">
-                  <Label htmlFor="addUserEmail" value="add board user" />
+                  <Label htmlFor="addUserEmail" value="invite a user by email (generates a link to share)" />
                 </div>
-                <TextInput id="addUserEmail" name="addUserEmail" type="text" value={addUserEmail} onChange={(e) => setAddUserEmail(e.currentTarget.value)} />
+                <TextInput id="addUserEmail" name="addUserEmail" type="email" placeholder="teammate@example.com" value={addUserEmail} onChange={(e) => setAddUserEmail(e.currentTarget.value)} />
               </div>
+              {inviteUrl ? (
+                <div>
+                  <Label value="share this invite link (valid 7 days):" />
+                  <TextInput readOnly value={inviteUrl} onFocus={(e) => e.currentTarget.select()} />
+                </div>
+              ) : null}
               <div>
                 <div className="mb-2 block">
                   <Label value="current board users" />

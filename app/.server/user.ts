@@ -1,53 +1,65 @@
-import { PrismaClient, user } from '@prisma/client';
-import crypto from 'crypto';
+import { user } from '@prisma/client';
+import { prisma } from './db';
 
-const prisma = new PrismaClient();
-
-export const generateSalt = (rounds : number = 16) : string => {
-  return crypto.randomBytes(Math.ceil(rounds / 2)).toString('hex').slice(0, rounds);
+export type NormalizedProfile = {
+  provider: string;
+  providerUserId: string;
+  email: string;
+  emailVerified: boolean;
+  name: string;
 };
 
-export const hashPassword = (password : string , salt : string) => {
-  const hash = crypto.createHmac('sha512', salt);
-  hash.update(password);
-  return hash.digest('hex');
+export const getUserById = async (id: string): Promise<user | null> => {
+  return await prisma.user.findUnique({ where: { id } });
 };
 
-export const createUser = async (email : string, name : string, password : string) : Promise<user | null> => {
-  const salt = generateSalt();
-  const passwordHash = hashPassword(password, salt);
-  return await prisma.user.create({
-    data: {
-      email,
-      name,
-      password_hash: passwordHash,
-      salt,
-    }
-  });
+export const getUserByEmail = async (email: string): Promise<user | null> => {
+  return await prisma.user.findUnique({ where: { email } });
 };
 
-export const getUserByEmail = async (email : string) : Promise<user | null> => {
-  return await prisma.user.findUnique({
-    where: {
-      email,
-    }
-  });
-};
-
-export const login = async (email : string, password : string) : Promise<user | null> => {
+export const upsertUserFromIdentity = async (profile: NormalizedProfile): Promise<user> => {
   return await prisma.$transaction(async (tx) => {
-    const user = await prisma.user.findUnique({
+    const existingIdentity = await tx.user_identity.findUnique({
       where: {
-        email,
-      }
+        provider_provider_user_id: {
+          provider: profile.provider,
+          provider_user_id: profile.providerUserId,
+        },
+      },
+      include: { user: true },
     });
-    if (!user) {
-      return null;
-    }
-    if (hashPassword(password, user.salt) === user.password_hash) {
-      return user;
+
+    if (existingIdentity) {
+      if (existingIdentity.email !== profile.email) {
+        await tx.user_identity.update({
+          where: { id: existingIdentity.id },
+          data: { email: profile.email, updated_at: new Date() },
+        });
+      }
+      return existingIdentity.user;
     }
 
-    return null;
+    const existingUser = await tx.user.findUnique({ where: { email: profile.email } });
+    if (existingUser) {
+      throw new Error(
+        `account_exists_unlinked: an account with email ${profile.email} already exists but has no ${profile.provider} identity linked. Sign in with an existing provider, then link ${profile.provider} from settings.`,
+      );
+    }
+
+    const newUser = await tx.user.create({
+      data: {
+        email: profile.email,
+        name: profile.name || profile.email,
+      },
+    });
+    await tx.user_identity.create({
+      data: {
+        user_id: newUser.id,
+        provider: profile.provider,
+        provider_user_id: profile.providerUserId,
+        email: profile.email,
+      },
+    });
+    return newUser;
   });
 };

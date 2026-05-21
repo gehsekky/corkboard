@@ -7,9 +7,9 @@ import { useLoaderData } from '@remix-run/react';
 import Header from 'components/Header';
 
 export const loader = async ({ request } : LoaderFunctionArgs) => {
-  const session = await verifySession(request);
+  const { session, headers } = await verifySession(request);
   const boardData = await getBoardsByUserId(session.get('id') || '');
-  return json(boardData);
+  return json(boardData, { headers });
 };
 
 export default function Index() {

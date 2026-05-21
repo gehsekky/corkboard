@@ -9,12 +9,24 @@ CREATE TABLE public.user (
   id UUID NOT NULL DEFAULT uuid_generate_v4(),
   email varchar(256) NOT NULL UNIQUE,
   name varchar(128) NOT NULL,
-  salt varchar(16) NOT NULL,
-  password_hash varchar(256) NOT NULL,
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   PRIMARY KEY (id)
 );
+
+CREATE TABLE public.user_identity (
+  id UUID NOT NULL DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.user(id),
+  provider varchar(32) NOT NULL,
+  provider_user_id varchar(255) NOT NULL,
+  email varchar(256) NOT NULL,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  PRIMARY KEY (id),
+  UNIQUE (provider, provider_user_id)
+);
+
+CREATE INDEX user_identity_user_id_idx ON public.user_identity(user_id);
 
 CREATE TABLE public.board (
   id UUID NOT NULL DEFAULT uuid_generate_v4(),
@@ -35,6 +47,22 @@ CREATE TABLE public.board_user (
   PRIMARY KEY (user_id, board_id)
 );
 
+CREATE INDEX board_user_board_id_idx ON public.board_user(board_id);
+
+CREATE TABLE public.board_invite (
+  id UUID NOT NULL DEFAULT uuid_generate_v4(),
+  board_id UUID NOT NULL REFERENCES public.board(id),
+  token varchar(64) NOT NULL UNIQUE,
+  email varchar(256),
+  invited_by UUID NOT NULL REFERENCES public.user(id),
+  accepted_at timestamp with time zone,
+  expires_at timestamp with time zone NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+CREATE INDEX board_invite_board_id_idx ON public.board_invite(board_id);
+
 CREATE TABLE public.board_item (
   id UUID NOT NULL DEFAULT uuid_generate_v4(),
   board_id UUID NOT NULL REFERENCES public.board(id),
@@ -48,3 +76,5 @@ CREATE TABLE public.board_item (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   PRIMARY KEY (id)
 );
+
+CREATE INDEX board_item_board_id_idx ON public.board_item(board_id);

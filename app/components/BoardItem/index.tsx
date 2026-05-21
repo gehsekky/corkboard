@@ -24,13 +24,13 @@ const BoardItem = ({ boardItem, onDelete, onUpdate } : BoardItemProps) => {
  
   useEffect(() => {
     if (contentEditableRef.current) {
-      contentEditableRef.current.innerHTML = content;
+      contentEditableRef.current.textContent = content;
     }
   }, []);
 
   useEffect(() => {
-    if (contentEditableRef.current && contentEditableRef.current.innerHTML !== boardItem.content) {
-      contentEditableRef.current.innerHTML = boardItem.content;
+    if (contentEditableRef.current && contentEditableRef.current.textContent !== boardItem.content) {
+      contentEditableRef.current.textContent = boardItem.content;
     }
     setContent(boardItem.content);
     setBackgroundColor(boardItem.background_color);
@@ -76,7 +76,7 @@ const BoardItem = ({ boardItem, onDelete, onUpdate } : BoardItemProps) => {
 
   // update state value
   const handleOnKeyUp : React.KeyboardEventHandler = (e : KeyboardEvent) : void => {
-    setContent(e.currentTarget.innerHTML);
+    setContent(e.currentTarget.textContent ?? '');
   };
 
   // delete board item handler
@@ -120,7 +120,7 @@ const BoardItem = ({ boardItem, onDelete, onUpdate } : BoardItemProps) => {
           <div><img draggable="false" src={hamburgerImg} className="h-6 w-6" /></div>
           <div><img draggable="false" src={closeImg} className="h-6 w-6" onClick={async () => await handleDelete(boardItem.id)} /></div>
         </div>
-        <div className="min-h-32 w-full p-2 outline-none" contentEditable={isEditable} onKeyUp={handleOnKeyUp} ref={contentEditableRef}></div>
+        <div className="min-h-32 w-full p-2 outline-none whitespace-pre-wrap break-words" contentEditable={isEditable} onKeyUp={handleOnKeyUp} ref={contentEditableRef}></div>
       </div>
     </Draggable>
   );

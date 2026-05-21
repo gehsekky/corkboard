@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from './db';
 
 export const getBoardItemsByBoardId = async (boardId : string) => {
   return await prisma.board_item.findMany({
@@ -36,30 +34,28 @@ export const deleteBoardItem = async (boardItemId : string) => {
   });
 };
 
-export const updateBoardItem = async (boardItemId : string, content : string, x : number, y : number, color : string) => {
-  const data : any = {
-    content,
-    x,
-    y,
-    background_color: color,
-    updated_at: new Date().toISOString(),
+export const updateBoardItem = async (
+  boardItemId: string,
+  content: string | null,
+  x: number | null,
+  y: number | null,
+  color: string | null,
+) => {
+  const data: {
+    content?: string;
+    x?: number;
+    y?: number;
+    background_color?: string;
+    updated_at: Date;
+  } = {
+    updated_at: new Date(),
   };
-  if (content === null) {
-    delete data.content;
-  }
-  if (x === null) {
-    delete data.x;
-  }
-  if (y === null) {
-    delete data.y;
-  }
-  if (color === null) {
-    delete data.background_color;
-  }
+  if (content !== null) data.content = content;
+  if (x !== null) data.x = x;
+  if (y !== null) data.y = y;
+  if (color !== null) data.background_color = color;
   return await prisma.board_item.update({
-    where: {
-      id: boardItemId,
-    },
+    where: { id: boardItemId },
     data,
   });
 };

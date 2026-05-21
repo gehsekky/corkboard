@@ -7,7 +7,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
     ports:
-      - "5432:5432"
+      - "5532:5432"
     volumes:
       - db:/var/lib/postgresql/data
       - ./prisma/seed.sql:/docker-entrypoint-initdb.d/seed.sql
@@ -18,6 +18,13 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: "postgresql://postgres:postgres@db:5432/db_corkboard?schema=public"
+      SESSION_SECRET: "${SESSION_SECRET:?SESSION_SECRET is required — generate with: openssl rand -base64 32}"
+      AUTH_CALLBACK_BASE_URL: "${AUTH_CALLBACK_BASE_URL:?AUTH_CALLBACK_BASE_URL is required (e.g. http://localhost:3000)}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      GOOGLE_HOSTED_DOMAIN: "${GOOGLE_HOSTED_DOMAIN:-}"
+      ALLOWED_EMAIL_DOMAINS: "${ALLOWED_EMAIL_DOMAINS:-}"
+      COOKIE_DOMAIN: "${COOKIE_DOMAIN:-}"
     ports:
       - "3000:3000"
 

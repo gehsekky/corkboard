@@ -14,6 +14,30 @@ import { renderToPipeableStream } from "react-dom/server";
 
 const ABORT_DELAY = 5_000;
 
+const setSecurityHeaders = (headers: Headers) => {
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Referrer-Policy', 'same-origin');
+  headers.set('X-Frame-Options', 'DENY');
+  if (process.env.NODE_ENV === 'production') {
+    headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    headers.set(
+      'Content-Security-Policy',
+      [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+        "font-src 'self' data:",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'",
+      ].join('; '),
+    );
+  }
+};
+
 export default function handleRequest(
   request: Request,
   responseStatusCode: number,
@@ -59,6 +83,7 @@ function handleBotRequest(
           const body = new PassThrough();
           const stream = createReadableStreamFromReadable(body);
 
+          setSecurityHeaders(responseHeaders);
           responseHeaders.set("Content-Type", "text/html");
 
           resolve(
@@ -109,6 +134,7 @@ function handleBrowserRequest(
           const body = new PassThrough();
           const stream = createReadableStreamFromReadable(body);
 
+          setSecurityHeaders(responseHeaders);
           responseHeaders.set("Content-Type", "text/html");
 
           resolve(

@@ -1,45 +1,27 @@
-import { ActionFunctionArgs, LoaderFunctionArgs, redirect } from '@remix-run/node';
+import { ActionFunctionArgs, LoaderFunctionArgs, json, redirect } from '@remix-run/node';
 import { createBoard } from '.server/board';
-import { getSession } from '.server/session';
+import { verifySession } from '.server/session';
+import { createBoardSchema, parseFormData } from '.server/validate';
 import CreateBoardPage from 'components/CreateBoardPage';
 import Header from 'components/Header';
 
 export const loader = async ({ request } : LoaderFunctionArgs) => {
-  const session = await getSession(
-    request.headers.get('Cookie')
-  );
-  if (!session.has('id')) {
-    throw redirect('/login');
-  }
-
-  return null;
+  const { headers } = await verifySession(request);
+  return json(null, { headers });
 };
 
 export async function action({ request } : ActionFunctionArgs) {
-  const session = await getSession(request.headers.get('Cookie'));
-  let userId = '';
-  if (session.has('id')) {
-    userId = session.get('id')?.toString() || '';
+  const { session, headers } = await verifySession(request);
+  const userId = session.get('id') || '';
+  if (request.method.toLowerCase() !== 'post') {
+    return json(null, { headers });
   }
-  if (request.method.toLowerCase() === 'post') {
-    const formData = await request.formData();
-    if (!formData.has('name') || !formData.has('color')) {
-      throw new Error('incomplete form detected. must provide name and color.');
-    }
-
-    const name = formData.get('name')?.toString() || '';
-    const color = formData.get('color')?.toString() || '';
-
-    const newBoard = await createBoard(name, color, userId);
-    if (!newBoard) {
-      throw new Error('could not create new board');
-    }
-
-    // redirect to newly created board
-    throw redirect(`/board/${newBoard.id}`);
+  const { name, color } = await parseFormData(request, createBoardSchema);
+  const newBoard = await createBoard(name, color, userId);
+  if (!newBoard) {
+    throw new Error('could not create new board');
   }
-
-  return null;
+  throw redirect(`/board/${newBoard.id}`, { headers });
 }
 
 export default function Index() {

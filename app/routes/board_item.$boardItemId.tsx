@@ -1,49 +1,72 @@
 import { ActionFunctionArgs, json } from '@remix-run/node';
 import { createBoardItem, deleteBoardItem, updateBoardItem } from '.server/board_item';
 import { verifySession } from '.server/session';
-import { emitter } from 'services/emitter.server';
+import { assertBoardItemAccess, assertBoardMember } from '.server/authz';
+import { boardItemCreateSchema, boardItemUpdateSchema, parseJson } from '.server/validate';
+import { limitByUser } from '.server/rate-limit';
+import { emitter, itemsChannel } from 'services/emitter.server';
 import { DEFAULT_BOARD_ITEM_BACKGROUND_COLOR } from 'constants/';
 
 export async function action({ request, params } : ActionFunctionArgs) {
-  const session = await verifySession(request);
+  const { session, headers } = await verifySession(request);
+  const userId = session.get('id')?.toString() || '';
+  limitByUser(userId, 'board-item-mutate', { limit: 120, windowSeconds: 60 });
   const boardItemId = params.boardItemId;
-  let userId = session.get('id')?.toString() || '';
-  let boardItemData;
   switch (request.method.toLowerCase()) {
-    case 'post':
+    case 'post': {
+      const body = await parseJson(request, boardItemCreateSchema);
+      await assertBoardMember(userId, body.boardId);
       try {
-        boardItemData = await request.json();
-        if (!boardItemData) {
-          throw new Error('must provide data for creating board item');
-        }
-        const newBoardItem = await createBoardItem(boardItemData.boardId, userId, boardItemData.x, boardItemData.y, DEFAULT_BOARD_ITEM_BACKGROUND_COLOR);
-        emitter.emit('boarditemschange');
-        return json(newBoardItem);
-      } catch (err) {
-        return null;
-      }
-    case 'delete':
-      try {
-        await deleteBoardItem(boardItemId || '');
-        emitter.emit('boarditemschange');
-        return null;
+        const newBoardItem = await createBoardItem(
+          body.boardId,
+          userId,
+          body.x,
+          body.y,
+          DEFAULT_BOARD_ITEM_BACKGROUND_COLOR,
+        );
+        emitter.emit(itemsChannel(body.boardId), { type: 'item.created', item: newBoardItem });
+        return json(newBoardItem, { headers });
       } catch (err) {
         console.error(err);
-        return null;
+        return json(null, { headers });
       }
-    case 'put':
+    }
+    case 'delete': {
+      if (!boardItemId || boardItemId === 'new') {
+        throw new Response(null, { status: 404 });
+      }
+      const itemBoardId = await assertBoardItemAccess(userId, boardItemId);
       try {
-        boardItemData = await request.json();
-        if (!boardItemData) {
-          throw new Error('must provide data for creating board item');
-        }
-        await updateBoardItem(boardItemId || '', boardItemData.content, boardItemData.x, boardItemData.y, boardItemData.color);
-        emitter.emit('boarditemschange');
-        return null;
+        await deleteBoardItem(boardItemId);
+        emitter.emit(itemsChannel(itemBoardId), { type: 'item.deleted', itemId: boardItemId });
+        return json(null, { headers });
       } catch (err) {
-        return null;
+        console.error(err);
+        return json(null, { headers });
       }
+    }
+    case 'put': {
+      if (!boardItemId || boardItemId === 'new') {
+        throw new Response(null, { status: 404 });
+      }
+      const itemBoardId = await assertBoardItemAccess(userId, boardItemId);
+      const body = await parseJson(request, boardItemUpdateSchema);
+      try {
+        const updated = await updateBoardItem(
+          boardItemId,
+          body.content ?? null,
+          body.x ?? null,
+          body.y ?? null,
+          body.color ?? null,
+        );
+        emitter.emit(itemsChannel(itemBoardId), { type: 'item.updated', item: updated });
+        return json(null, { headers });
+      } catch (err) {
+        console.error(err);
+        return json(null, { headers });
+      }
+    }
     default:
-      throw new Error('unsupported http method');
+      throw new Response('unsupported method', { status: 405 });
   }
 }

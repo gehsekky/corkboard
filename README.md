@@ -30,7 +30,7 @@ else, run the Vite dev server:
 npm run dev
 ```
 
-in browser, open `localhost:5173`
+in browser, open `localhost:5174`
 
 example quick startup:
 

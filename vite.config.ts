@@ -7,5 +7,6 @@ import svgr from 'vite-plugin-svgr';
 installGlobals();
 
 export default defineConfig({
+  server: { port: 5174, strictPort: true },
   plugins: [remix(), tsconfigPaths(), svgr()],
 });

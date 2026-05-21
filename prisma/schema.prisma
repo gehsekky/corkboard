@@ -8,15 +8,31 @@ datasource db {
 }
 
 model board {
-  id               String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name             String       @db.VarChar(1024)
-  background_color String       @db.VarChar(7)
-  created_by       String       @db.Uuid
-  updated_at       DateTime     @default(now()) @db.Timestamptz(6)
-  created_at       DateTime     @default(now()) @db.Timestamptz(6)
-  user             user         @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id               String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name             String         @db.VarChar(1024)
+  background_color String         @db.VarChar(7)
+  created_by       String         @db.Uuid
+  updated_at       DateTime       @default(now()) @db.Timestamptz(6)
+  created_at       DateTime       @default(now()) @db.Timestamptz(6)
+  user             user           @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   board_item       board_item[]
   board_user       board_user[]
+  board_invite     board_invite[]
+}
+
+model board_invite {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  board_id    String    @db.Uuid
+  token       String    @unique @db.VarChar(64)
+  email       String?   @db.VarChar(256)
+  invited_by  String    @db.Uuid
+  accepted_at DateTime? @db.Timestamptz(6)
+  expires_at  DateTime  @db.Timestamptz(6)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  board       board     @relation(fields: [board_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user        user      @relation(fields: [invited_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([board_id])
 }
 
 model board_item {
@@ -32,6 +48,8 @@ model board_item {
   created_at       DateTime @default(now()) @db.Timestamptz(6)
   board            board    @relation(fields: [board_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   user             user     @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([board_id])
 }
 
 model board_user {
@@ -44,17 +62,32 @@ model board_user {
   user       user     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@id([user_id, board_id])
+  @@index([board_id])
 }
 
 model user {
-  id            String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  email         String       @unique @db.VarChar(256)
-  name          String       @db.VarChar(128)
-  salt          String       @db.VarChar(16)
-  password_hash String       @db.VarChar(256)
-  updated_at    DateTime     @default(now()) @db.Timestamptz(6)
-  created_at    DateTime     @default(now()) @db.Timestamptz(6)
+  id            String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email         String          @unique @db.VarChar(256)
+  name          String          @db.VarChar(128)
+  updated_at    DateTime        @default(now()) @db.Timestamptz(6)
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
   board         board[]
   board_item    board_item[]
   board_user    board_user[]
+  user_identity user_identity[]
+  board_invite  board_invite[]
+}
+
+model user_identity {
+  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id          String   @db.Uuid
+  provider         String   @db.VarChar(32)
+  provider_user_id String   @db.VarChar(255)
+  email            String   @db.VarChar(256)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  user             user     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([provider, provider_user_id])
+  @@index([user_id])
 }
